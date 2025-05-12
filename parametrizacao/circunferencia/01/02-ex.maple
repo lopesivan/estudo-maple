@@ -1,0 +1,28 @@
+restart:
+with(plots):
+
+# Raio
+r := 1:
+
+# Parametrização da circunferência no sentido anti-horário (trigonométrico)
+x := t -> r*cos(t):
+y := t -> -r*sin(t):
+
+# Intervalo de t de 0 até 5π/6
+tmin := 0:
+tmax := evalf((5*Pi)/6):
+N    := 10:
+step := evalf((tmax-tmin)/N):
+
+# Construir a curva circular
+circ := plot([x(t), y(t), t = tmin .. tmax], color = blue, thickness = 2):
+
+# seq([x(t), y(t)], t = tmin .. tmax, step);
+
+# Preencher a região da "fatia de pizza"
+preenchimento := plottools[polygon](
+   [[0,0], seq([x(t), y(t)], t = tmin .. tmax, step)], color = cyan, transparency = 0.3
+);
+
+# Combinar preenchimento com a curva
+display([preenchimento, circ], scaling = constrained, axes = normal);
