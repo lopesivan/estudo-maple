@@ -1,0 +1,32 @@
+all: 03.pdf 04.pdf
+
+03.ps: 03.mpl
+	maple -q < 03.mpl
+
+03.pdf: 03.ps
+	epspdf 03.ps
+	convert 03.ps 03.pdf
+
+04.ps: 04.mpl
+	maple -q < 04.mpl
+
+04.pdf: 04.ps
+	epspdf 04.ps
+	convert 04.ps 04.pdf
+
+clean:
+	rm -f 03.ps 03.pdf 03.png
+	rm -f 04.ps 04.pdf 04.png
+
+# Alvo de ajuda
+help:
+	@echo "Makefile de geração automática com Maple:"
+	@echo ""
+	@echo "Alvos disponíveis:"
+	@echo "  make            Gera todos os PDFs: $(TARGETS)"
+	@echo "  make 03.pdf     Gera somente 03.pdf"
+	@echo "  make 04.pdf     Gera somente 04.pdf"
+	@echo "  make clean      Remove arquivos .ps, .pdf e .png"
+	@echo "  make help       Mostra esta ajuda"
+
+
