@@ -26,7 +26,7 @@ preenchimento := polygon([[0, 0], op(pontos)], color = cyan, transparency = 0.3)
 
 # COMANDO CRUCIAL: não usar ; nem : aqui! Essa linha renderiza e salva o gráfico
 p := display([preenchimento, circ], scaling = constrained, axes = normal);
-plotsetup(ps, plotoutput="04.ps", plotoptions="height=600,width=600");
+plotsetup(ps, plotoutput="04.ps", plotoptions="color,portrait,height=500,width=500");
 print(p);
 plotsetup(default):
 

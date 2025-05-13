@@ -2,6 +2,10 @@
 TARGETS := 03 04
 
 # Regra genérica: gerar PDF a partir de PS
+%.png: %.ps
+	convert $< $@
+
+# Regra genérica: gerar PDF a partir de PS
 %.pdf: %.ps
 	epspdf $<
 	convert $< $@
