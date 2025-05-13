@@ -14,7 +14,7 @@ y := t -> -r*sin(t):
 # Intervalo de t
 tmin := 0:
 tmax := evalf((5*Pi)/6):
-N    := 10:
+N    := 100000:
 step := evalf((tmax - tmin)/N):
 
 # Curva do arco
