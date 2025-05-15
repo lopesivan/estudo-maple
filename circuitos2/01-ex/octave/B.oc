@@ -13,8 +13,8 @@
 
 output_precision(4)
 
-R   = 8;
-X   = 6;
+R   = 3;
+X   = 4;
 Vs_ = to_rd(10, 0)
 [Vs, arg_Vs ]= to_pd(Vs_)
 
@@ -25,8 +25,8 @@ I_ = Vs_/Z_
 [I, arg_I ]= to_pd(I_)
 
 S = (Vs^2)/sqrt(R^2+X^2)
-SL = S*(X)/sqrt(R^2+X^2)
 SR = S*(R)/sqrt(R^2+X^2)
+SL = S*(X)/sqrt(R^2+X^2)
 
 FP=(R)/sqrt(R^2+X^2)
 
