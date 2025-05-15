@@ -1,0 +1,22 @@
+% main.oc - a
+% Maintainer: Ivan Lopes
+
+% constants.m
+% d2r.m     - Converts angle(s) from degrees to radians.
+% div_c.m   - Applies current divider rule for two impedances in parallel.
+% div_t.m   - Applies voltage divider rule for two impedances in series.
+% r2d.m     - Converts angle(s) from radians to degrees.
+% to_pd.m   - Converts complex number(s) to magnitude and phase in degrees.
+% to_rd.m   - Converts magnitude and phase (in degrees) to complex form.
+% z_p.m     - Computes equivalent impedance of impedances in parallel.
+% z_s.m     - Computes equivalent impedance of impedances in series.
+
+R    = 3;
+XL   = 2;
+XC   = 6;
+X    = XL-XC;
+fase = 10;
+
+Vs   = to_rd(10, fase);  % <10.6, 30°>
+
+Z = R + X*j
