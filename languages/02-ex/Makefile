@@ -28,17 +28,17 @@ advanced_maple: advanced_maple.c
 run-simple: simple
 	@echo "=== Executando exemplo simples ==="
 	@$(call setup_libs)
-	@LD_LIBRARY_PATH=$(MAPLE_BIN):.:$$LD_LIBRARY_PATH ./simple
+	@LD_LIBRARY_PATH=$(MAPLE_BIN):.:$$LD_LIBRARY_PATH ./$^
 
 run-advanced: advanced_maple
 	@echo "=== Executando exemplos avançados ==="
 	@$(call setup_libs)
-	@LD_LIBRARY_PATH=$(MAPLE_BIN):.:$$LD_LIBRARY_PATH ./advanced_maple
+	@LD_LIBRARY_PATH=$(MAPLE_BIN):.:$$LD_LIBRARY_PATH ./$^
 
 run-ode_solver: ode_solver
 	@echo "=== Executando exemplo ode_solver ==="
 	@$(call setup_libs)
-	@LD_LIBRARY_PATH=$(MAPLE_BIN):.:$$LD_LIBRARY_PATH ./simple
+	@LD_LIBRARY_PATH=$(MAPLE_BIN):.:$$LD_LIBRARY_PATH ./$^
 
 run: run-simple run-advanced run-ode_solver
 
