@@ -1,164 +1,126 @@
-/* advanced_maple_optimization.c - Exemplo Completo de Otimização
- * Simbólica e Numérica com Maple C API */
+/* ***********************************************************************
+ * OpenMaple Example Program
+ *
+ * Copyright (c) Maplesoft, a division of Waterloo Maple Inc. 2019.
+ * You are permitted to copy, modify and distribute this code, as long as
+ * this copyright notice is prominently included and remains intact. If any
+ * modifications were done, a prominent notice of the fact that the code has
+ * been modified, as well as a list of the modifications, must also be
+ * included. To the maximum extent permitted by applicable laws, this
+ * material is provided "as is" without any warranty or condition of any kind.
+ *
+ * This example program illustrates how to use the OpenMaple API
+ * to initialize the Maple kernel, evaluate expressions, access help, 
+ * and interrupt computations.  Users are encouraged to use and modify
+ * this code as a starting point for learning the OpenMaple API.  
+ *
+ *********************************************************************** */
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <time.h>
 #include <string.h>
+
 #include "maplec.h"
 
-/* ============================================
- * CALLBACKS (Comunicação com o Kernel Maple)
- * ============================================ */
+#ifdef _MSC_VER
+#  define CDECL __cdecl
+#else
+#  define CDECL
+#endif
 
-// Callback para mensagens de texto e saída padrão do Maple
-static void M_DECL textCallBack(void* /* data */,
-                                int /* tag */,
-                                const char* output)
+/* global variable used by queryInterrupt() */
+static int Interrupted = 0;
+
+/* interrupt signal handler: sets global variable when user hits Ctrl-C */
+void CDECL catch_intr( int signo )
 {
-    printf(">> Maple: %s\n", output);
+    Interrupted = TRUE;
+    signal(SIGINT,catch_intr);
+#ifdef _MSC_VER
+    signal(SIGBREAK,catch_intr);
+#endif
 }
 
-// Callback para mensagens de erro do Maple
-static void M_DECL errorCallBack(void* /* data */,
-                                 M_INT       offset,
-                                 const char* msg)
+/* interrupt callback: stops computation when `Interrupted' is true */
+static M_BOOL M_DECL queryInterrupt( void *data )
 {
-    fprintf(stderr,
-            "❌ Erro Maple [offset %ld]: %s\n",
-            (long)offset,
-            msg);
+    if( Interrupted ) {
+	Interrupted = 0;
+  	return( TRUE );
+    }
+    return( FALSE );
 }
 
-/* ============================================
- * FUNÇÃO DE EXEMPLO: Otimização
- * CORREÇÃO FINAL: Removido MapleGetVariable; usamos
- * EvalMapleStatement para recuperar o valor da variável Maple após
- * o cálculo.
- * ============================================ */
-void example_optimization(MKernelVector kv)
+/* callback used for directing help output */
+static M_BOOL M_DECL writeHelpChar( void *data, int c )
 {
-    printf("\n=== EXEMPLO COMPLETO: Otimização Simbólica e "
-           "Numérica ===\n");
-
-    // Carregar o pacote de otimização
-    EvalMapleStatement(kv, "with(Optimization):");
-    printf("Pacote 'Optimization' carregado.\n");
-
-    // --- 1. Otimização Simbólica (Mínimo de uma Função) ---
-    printf("\n## 1. Otimização Simbólica (Função de 1 Variável)\n");
-
-    // 1. Definir a função no Maple
-    EvalMapleStatement(kv, "f := x -> x^4 - 4*x^2 + 1;");
-
-    // 2. Executar Minimize e ARMAZENAR o resultado na variável
-    // Maple 'min_result' O EvalMapleStatement retorna o valor da
-    // última expressão.
-    EvalMapleStatement(
-        kv, "min_result := Minimize(f(x), x=-3..3, 'location');");
-
-    // 3. RECUPERAR o valor avaliando a variável 'min_result' no
-    // Maple
-    ALGEB min_simbolico_result =
-        EvalMapleStatement(kv, "min_result;");
-
-    printf("Função: f(x) = x^4 - 4x^2 + 1\n");
-    printf("Mínimo Simbólico: ");
-    MapleALGEB_Printf(kv, "%a\n", min_simbolico_result);
-
-    // --- 2. Otimização Numérica com Restrições ---
-    printf("\n## 2. Otimização Numérica com Restrições "
-           "(Não-Linear)\n");
-
-    printf("Maximizar: g(x, y) = x*y\n");
-    printf("Restrição: x^2 + y^2 <= 1\n");
-
-    // Executar Maximize e ARMAZENAR o resultado na variável Maple
-    // 'max_result'
-    EvalMapleStatement(kv,
-                       "max_result := Maximize(x*y, {x^2 + y^2 <= "
-                       "1}, initialpoint = [x=0.5, y=0.5]);");
-
-    // RECUPERAR o valor avaliando a variável 'max_result' no Maple
-    ALGEB max_numerico_result =
-        EvalMapleStatement(kv, "max_result;");
-
-    printf("Resultado Numérico Completo: ");
-    MapleALGEB_Printf(kv, "%a\n", max_numerico_result);
-
-    // ... dentro de example_optimization(MKernelVector kv) ...
-
-    // --- 3. Extraindo Valor e Coordenadas da Solução ---
-    printf("\n## 3. Extraindo Valor e Coordenadas da Solução "
-           "(Convertendo para C) ===\n");
-
-    // 1. Extrair o valor máximo (primeiro elemento de max_result)
-    // Executamos a expressão no Maple:
-    ALGEB max_value_maple =
-        EvalMapleStatement(kv, "max_result[1];");
-    double max_value_c =
-        MapleToFloat64(kv, max_value_maple);  // CONVERSÃO PARA C
-
-    printf("Valor Máximo Encontrado (C double): %.8f\n",
-           max_value_c);
-
-    // 2. Extrair o valor de X (segundo elemento de max_result, que
-    // é um set/list de atribuições) Precisamos acessar o valor x do
-    // conjunto de resultados: max_result[2][1]
-    ALGEB x_assign_maple = EvalMapleStatement(
-        kv, "op(1, max_result[2]);");  // Pega a primeira atribuição
-                                       // {x=...}
-
-    // Agora, extraímos o valor real do lado direito (rhs) da
-    // atribuição
-    ALGEB x_value_maple =
-        EvalMapleStatement(kv, "rhs(op(1, max_result[2]));");
-    double x_value_c =
-        MapleToFloat64(kv, x_value_maple);  // CONVERSÃO PARA C
-
-    printf("Coordenada X (C double): %.8f\n", x_value_c);
-
-    // 3. (Opcional) Se você quiser manter a saída simbólica do
-    // conjunto de coordenadas:
-    ALGEB coordenadas_simbolica =
-        EvalMapleStatement(kv, "max_result[2];");
-    printf("Coordenadas no Máximo (Saída Simbólica): ");
-    MapleALGEB_Printf(kv, "%a\n", coordenadas_simbolica);
+    putchar(c);
+    return( FALSE );
 }
 
-/* ============================================
- * MAIN
- * ============================================ */
-int main(int argc, char* argv[])
+/* callback used for directing result output */
+static void M_DECL textCallBack( void *data, int tag, const char *output )
 {
-    char          err[2048];
-    MKernelVector kv;
+    printf("%s\n",output);
+}
 
-    // Definir o vetor de Callbacks
-    MCallBackVectorDesc cb = {
-        textCallBack,
-        errorCallBack,
-        0, /* statusCallBack */
-        0, /* readLineCallBack */
-        0, /* redirectCallBack */
-        0, /* streamCallBack */
-        0, /* queryInterrupt */
-        0  /* callBackCallBack */
-    };
+/* simple program to print a prompt, get input, evaluate it, 
+   and display results 
+*/
+int main( int argc, char *argv[] )
+{
+    char expr[1000], err[2048];  /* command input and error string buffers */
+    MKernelVector kv;  /* Maple kernel handle */
+    MCallBackVectorDesc cb = {  textCallBack, 
+				0,   /* errorCallBack not used */
+				0,   /* statusCallBack not used */
+				0,   /* readLineCallBack not used */
+				0,   /* redirectCallBack not used */
+				0,   /* streamCallBack not used */
+			        queryInterrupt, 
+				0    /* callBackCallBack not used */
+			    };
+    ALGEB dag;  /* eval result (Maple data-structure) */
+    int len;
 
-    // Inicializar Maple
-    printf("🍁 Inicializando Maple...\n");
-    if((kv = StartMaple(argc, argv, &cb, NULL, NULL, err)) == NULL)
-    {
-        fprintf(stderr, "Erro fatal ao iniciar Maple: %s\n", err);
-        return 1;
+    /* initialize Maple */
+    if( (kv=StartMaple(argc,argv,&cb,NULL,NULL,err)) == NULL ) {
+	printf("Fatal error, %s\n",err);
+	return( 1 );
+    }
+ 
+    /* catch ^C */
+    signal(SIGINT,catch_intr);
+
+    printf("    |\\^/|     Maple (Example Program)\n");
+    printf("._|\\|   |/|_. Copyright (c) Maplesoft, a division of Waterloo Maple Inc. 2004\n");
+    printf(" \\OPENMAPLE/  All rights reserved. Maple and OpenMaple are trademarks of\n");
+    printf(" <____ ____>  Waterloo Maple Inc.\n");
+    printf("      |       Type ? for help.\n");
+
+    /* Print a prompt, get a Maple expression, evaluate it,
+       print a prompt, get a Maple expression, evaluate it, ... */
+    for( ;; ) {
+        printf("> ");
+        if( !fgets(expr,sizeof(expr),stdin) ) break;
+
+        /* Strip off trailing whitespace (including CR and/or LF). */
+        for( len = strlen(expr); len > 0 && isspace(expr[len-1]); --len )
+            ;
+        expr[len] = '\0';
+
+	if( expr[0] == '?' ) {
+	    MapleHelp(kv,expr+1,NULL,writeHelpChar,NULL,80,NULL);
+	}
+	else {
+	    dag = EvalMapleStatement(kv,expr);
+	    if( dag && IsMapleStop(kv,dag) ) 
+		break;
+	}
     }
 
-    printf("✅ Maple inicializado com sucesso!\n");
-
-    // Executar o exemplo de otimização
-    example_optimization(kv);
-
-    printf("\n✅ Exemplo de Otimização executado com sucesso!\n");
-
-    StopMaple(kv);
-    return 0;
+    return( 0 );
 }
+
