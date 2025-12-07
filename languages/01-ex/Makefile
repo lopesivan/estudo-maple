@@ -41,6 +41,7 @@ clean:
 
 clean-all: clean
 	/bin/rm -f *.so *.so.*
+	rm ../license
 
 .PHONY: all run clean clean-all check-libs
 
