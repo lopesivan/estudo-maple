@@ -8,11 +8,14 @@ LDLIBS=-L$(MAPLE_BIN) -lmaplec -lrt -lm
 LDFLAGS=-Wl,-rpath,$(MAPLE_BIN) -Wl,-rpath,$$ORIGIN
 
 # Targets
-TARGETS=simple advanced_maple
+TARGETS=simple advanced_maple ode_solver
 
 all: $(TARGETS)
 
 simple: simple.c
+	$(CC) $(CFLAGS) $< $(LDFLAGS) $(LDLIBS) -o $@
+
+ode_solver: ode_solver.c
 	$(CC) $(CFLAGS) $< $(LDFLAGS) $(LDLIBS) -o $@
 
 license:
@@ -32,7 +35,12 @@ run-advanced: advanced_maple
 	@$(call setup_libs)
 	@LD_LIBRARY_PATH=$(MAPLE_BIN):.:$$LD_LIBRARY_PATH ./advanced_maple
 
-run: run-simple run-advanced
+run-ode_solver: ode_solver
+	@echo "=== Executando exemplo ode_solver ==="
+	@$(call setup_libs)
+	@LD_LIBRARY_PATH=$(MAPLE_BIN):.:$$LD_LIBRARY_PATH ./simple
+
+run: run-simple run-advanced run-ode_solver
 
 # Verificar dependências
 check-libs: $(TARGETS)
