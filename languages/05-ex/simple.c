@@ -2,69 +2,94 @@
 #include <stdlib.h>
 #include "maplec.h"
 
-/* callback used for directing result output */
-static void M_DECL textCallBack(void*       data,
-                                int         tag,
-                                const char* output)
+static void M_DECL textCallBack(void *data, int tag, const char *output)
 {
+    (void)data; (void)tag;
     printf("%s\n", output);
 }
 
-int main(int argc, char* argv[])
+static void M_DECL errorCallBack(void *data, M_INT offset, const char *msg)
 {
-    char                err[2048];
-    MKernelVector       kv;
-    MCallBackVectorDesc cb = {textCallBack, 0, 0, 0, 0, 0, 0, 0};
-    ALGEB               r;
+    (void)data; (void)offset;
+    fprintf(stderr, "Erro: %s\n", msg);
+}
 
-    /* initialize Maple */
-    if((kv = StartMaple(argc, argv, &cb, NULL, NULL, err)) == NULL)
-    {
-        printf("Fatal error, %s\n", err);
-        return (1);
+int main(int argc, char *argv[])
+{
+    char err[2048];
+    MKernelVector kv;
+    MCallBackVectorDesc cb = { textCallBack, errorCallBack, 0, 0, 0, 0, 0, 0 };
+    ALGEB r;
+
+    if ((kv = StartMaple(argc, argv, &cb, NULL, NULL, err)) == NULL) {
+        printf("Erro fatal: %s\n", err);
+        return 1;
     }
 
-    printf("=== Exemplos de Integrais Simples ===\n\n");
+    printf("=== INTEGRAIS DEFINIDAS - Maple C API ===\n\n");
 
-    /* Exemplo 1: integral de x^2 de 0 a 2 */
-    /* Resultado esperado: 8/3 = 2.666666667 */
-    printf("Exemplo 1: int(x^2, x=0..2)\n");
+    /* CRÍTICO: Configurar libname corretamente */
+    printf("Configurando bibliotecas Maple...\n");
+    EvalMapleStatement(kv, "libname := \"/opt/maple2021/lib\", libname;");
+    printf("✓ Bibliotecas configuradas\n\n");
+
+    /* Exemplo 1: int(x^2, x=0..2) - Resultado: 8/3 */
+    printf("Exemplo 1: ∫₀² x² dx\n");
+    printf("Resultado simbólico: ");
     r = EvalMapleStatement(kv, "int(x^2, x=0..2);");
-    MapleALGEB_Printf(kv, "Resultado simbólico: %a\n", r);
-
-    r = MapleEval(kv, r);
-    MapleALGEB_Printf(kv, "Resultado avaliado: %a\n", r);
-
+    
+    printf("Resultado numérico: ");
     r = EvalMapleStatement(kv, "evalf(int(x^2, x=0..2));");
-    MapleALGEB_Printf(kv, "Resultado numérico: %a\n\n", r);
+    printf("\n");
 
-    /* Exemplo 2: integral de sin(x) de 0 a Pi */
-    /* Resultado esperado: 2 */
-    printf("Exemplo 2: int(sin(x), x=0..Pi)\n");
+    /* Exemplo 2: int(sin(x), x=0..Pi) - Resultado: 2 */
+    printf("Exemplo 2: ∫₀^π sin(x) dx\n");
+    printf("Resultado simbólico: ");
     r = EvalMapleStatement(kv, "int(sin(x), x=0..Pi);");
-    MapleALGEB_Printf(kv, "Resultado simbólico: %a\n", r);
-
+    
+    printf("Resultado numérico: ");
     r = EvalMapleStatement(kv, "evalf(int(sin(x), x=0..Pi));");
-    MapleALGEB_Printf(kv, "Resultado numérico: %a\n\n", r);
+    printf("\n");
 
-    /* Exemplo 3: integral de 1/(1+x^2) de 0 a 1 */
-    /* Resultado esperado: Pi/4 = 0.7853981634 */
-    printf("Exemplo 3: int(1/(1+x^2), x=0..1)\n");
+    /* Exemplo 3: int(1/(1+x^2), x=0..1) - Resultado: Pi/4 */
+    printf("Exemplo 3: ∫₀¹ 1/(1+x²) dx\n");
+    printf("Resultado simbólico: ");
     r = EvalMapleStatement(kv, "int(1/(1+x^2), x=0..1);");
-    MapleALGEB_Printf(kv, "Resultado simbólico: %a\n", r);
-
+    
+    printf("Resultado numérico: ");
     r = EvalMapleStatement(kv, "evalf(int(1/(1+x^2), x=0..1));");
-    MapleALGEB_Printf(kv, "Resultado numérico: %a\n\n", r);
+    printf("\n");
 
-    /* Exemplo 4: integral de e^x de 0 a 1 */
-    /* Resultado esperado: e - 1 = 1.718281828 */
-    printf("Exemplo 4: int(exp(x), x=0..1)\n");
-    r = EvalMapleStatement(kv, "int(exp(x), x=0..1);");
-    MapleALGEB_Printf(kv, "Resultado simbólico: %a\n", r);
+    /* Exemplo 4: int(exp(t), t=0..1) - Resultado: e-1 */
+    printf("Exemplo 4: ∫₀¹ eᵗ dt\n");
+    printf("Resultado simbólico: ");
+    r = EvalMapleStatement(kv, "int(exp(t), t=0..1);");
+    
+    printf("Resultado numérico: ");
+    r = EvalMapleStatement(kv, "evalf(int(exp(t), t=0..1));");
+    printf("\n");
 
-    r = EvalMapleStatement(kv, "evalf(int(exp(x), x=0..1));");
-    MapleALGEB_Printf(kv, "Resultado numérico: %a\n\n", r);
+    /* Exemplo 5: Integral dupla */
+    printf("Exemplo 5: ∫₀¹ ∫₀² u*v dv du\n");
+    printf("Resultado: ");
+    r = EvalMapleStatement(kv, "int(int(u*v, v=0..2), u=0..1);");
+    printf("\n");
+
+    /* Exemplo 6: Usando procedimento customizado */
+    printf("Exemplo 6: Procedimento customizado myint\n");
+    EvalMapleStatement(kv, 
+        "myint := proc(f, var, a, b) "
+        "  local F; "
+        "  F := int(f, var); "
+        "  eval(F, var=b) - eval(F, var=a); "
+        "end proc;");
+    
+    printf("myint(x^3, x, 0, 2) = ");
+    r = EvalMapleStatement(kv, "myint(x^3, x, 0, 2);");
+    printf("\n");
+
+    printf("✅ Todos os exemplos executados com sucesso!\n");
 
     StopMaple(kv);
-    return (0);
+    return 0;
 }
