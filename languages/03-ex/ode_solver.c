@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
+
 #include "maplec.h"
 
 static void M_DECL textCallBack(void*       data,
