@@ -19,6 +19,7 @@ license:
 	ln -s /opt/maple2021/license ..
 
 # Executar exemplos
+export MAPLE=/opt/maple2021
 run: main
 	@echo "=== Executando exemplo mains ==="
 	@$(call setup_libs)
