@@ -27,6 +27,7 @@ license:
 	ln -s /opt/maple2021/license ..
 
 # Executar exemplos
+export MAPLE=/opt/maple2021
 run: line
 	@echo "=== Executando line (OpenMaple + OpenGL) ==="
 	@echo "Instruções:"
