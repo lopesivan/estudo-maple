@@ -1,34 +1,18 @@
 /* 
- * OpenMaple Example 
+ * plotfunc.c - Plotador Interativo de Funções com OpenMaple + OpenGL
  *
- * Copyright (c) Maplesoft, a division of Waterloo Maple Inc. 2004.
- * You are permitted to copy, modify and distribute this code, as long as
- * this copyright notice is prominently included and remains intact. If any
- * modifications were done, a prominent notice of the fact that the code has
- * been modified, as well as a list of the modifications, must also be
- * included. To the maximum extent permitted by applicable laws, this
- * material is provided "as is" without any warranty or condition of any kind.
+ * Funcionalidades:
+ * - Digite uma função matemática e veja seu gráfico
+ * - Calcule integral definida da função
+ * - Calcule derivada e plote junto
+ * - Menu com funções pré-definidas
  *
- * This program allows you to pick points on a -1..1 by -1..1
- * grid by clicking your mouse.  The lines are interpolated 
- * using one of Maple's CurveFitting functions.  A selectable 
- * menu appears when * you right click your mouse, allowing 
- * you to pick the * interpolation method to be shown.
- *
- * Pressing 'c' will clear the screen.  
- * Pressing 'q' will quit the program. 
- *
- * The interpolated curve may not be displayed when there are too 
- * few points for the given method or the points have not been 
- * selected in increasing order.  In these cases you may want to
- * select a different CurveFitting function.  If you have started
- * this application from a console window, you will see error
- * messages appear there when one of these situations arises. 
- *
- * See the README file in this directory for help compiling
- * this program with OpenMaple.  You will require a copy of
- * OpenGL in order to build this application.
- *
+ * Controles:
+ * - Tecla 'i': Mostrar/esconder integral
+ * - Tecla 'd': Mostrar/esconder derivada
+ * - Tecla 'c': Limpar
+ * - Tecla 'q': Sair
+ * - Botão direito: Menu de funções
  */
 
 #include <GL/glut.h>
@@ -37,419 +21,453 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 #include "maplec.h"
 
 #define FONT (void *)GLUT_BITMAP_8_BY_13
+#define MAX_POINTS 500
 
 #ifdef _MSC_VER
-  /* windows */
   #define CDECL __cdecl
 #else
   #define CDECL 
 #endif
 
-/* global variables */
-double width, height, xPos = 0.0, yPos = 0.0;
-double *vertex = NULL, *fit = NULL;
-int num_vertices = 0, vertex_size = 0;
-int fit_size = 0;
+/* Variáveis globais */
+double width = 640, height = 480;
 MKernelVector kv;
-char *FitFunctionName;
-ALGEB FitFunction, varX, varEqn;
 
-static char *FitFunctions[6] = {
-    "BSplineCurve",
-    "LeastSquares",
-    "PolynomialInterpolation", 
-    "Spline",
-    "ThieleInterpolation",
-    NULL 
+/* Dados da função */
+char *current_function = NULL;
+double *func_points = NULL;
+double *deriv_points = NULL;
+int num_points = 0;
+
+/* Estados de visualização */
+int show_derivative = 0;
+int show_integral = 0;
+double integral_value = 0.0;
+double x_min = -5.0, x_max = 5.0;
+
+/* Funções pré-definidas */
+static char *PresetFunctions[] = {
+    "sin(x)",
+    "cos(x)",
+    "x^2",
+    "x^3 - 3*x",
+    "exp(-x^2)",
+    "1/(1+x^2)",
+    "sin(x)/x",
+    NULL
 };
 
-/* OpenGL: called when the window is resized */
-void CDECL changeSize( int w, int h ) 
+/* ============================================
+ * CALLBACKS MAPLE
+ * ============================================ */
+
+static void M_DECL textCallBack(void *data, int tag, const char *output)
 {
-    /* we're storing these values for later use in the 
-     mouse motion functions */
-    if( h < 0 ) h = 1;
+    /* Silencioso - não imprime saída do Maple */
+    (void)data; (void)tag; (void)output;
+}
+
+static void M_DECL errorCallBack(void *data, M_INT offset, const char *msg)
+{
+    fprintf(stderr, "Maple Error: %s\n", msg);
+    (void)data; (void)offset;
+}
+
+/* ============================================
+ * FUNÇÕES DE CÁLCULO COM MAPLE
+ * ============================================ */
+
+void calculate_function_points(const char *function_str)
+{
+    ALGEB result;
+    char maple_cmd[512];
+    int i;
+    double x, step;
+    
+    if (!function_str) return;
+    
+    printf("Calculando função: %s\n", function_str);
+    
+    /* Limpar pontos antigos */
+    if (func_points) {
+        free(func_points);
+        func_points = NULL;
+    }
+    if (deriv_points) {
+        free(deriv_points);
+        deriv_points = NULL;
+    }
+    
+    num_points = MAX_POINTS;
+    func_points = (double*)malloc(2 * num_points * sizeof(double));
+    deriv_points = (double*)malloc(2 * num_points * sizeof(double));
+    
+    if (!func_points || !deriv_points) {
+        printf("Erro ao alocar memória!\n");
+        return;
+    }
+    
+    /* Definir a função no Maple */
+    sprintf(maple_cmd, "f := x -> %s:", function_str);
+    result = EvalMapleStatement(kv, maple_cmd);
+    if (!result) {
+        printf("Erro ao definir função no Maple\n");
+        return;
+    }
+    
+    /* Calcular derivada */
+    sprintf(maple_cmd, "df := diff(%s, x):", function_str);
+    result = EvalMapleStatement(kv, maple_cmd);
+    if (!result) {
+        printf("Erro ao calcular derivada\n");
+        return;
+    }
+    
+    /* Calcular integral de x_min a x_max */
+    sprintf(maple_cmd, "int_val := evalf(int(%s, x=%f..%f)):", 
+            function_str, x_min, x_max);
+    result = EvalMapleStatement(kv, maple_cmd);
+    
+    /* Extrair valor da integral */
+    result = EvalMapleStatement(kv, "int_val;");
+    if (result && !IsMapleNULL(kv, result)) {
+        char *str_result = MapleToString(kv, result);
+        if (str_result && strlen(str_result) > 0) {
+            integral_value = atof(str_result);
+            printf("Integral [%.2f, %.2f] = %f\n", x_min, x_max, integral_value);
+        }
+    }
+    
+    /* Calcular pontos da função e derivada */
+    step = (x_max - x_min) / (num_points - 1);
+    
+    for (i = 0; i < num_points; i++) {
+        x = x_min + i * step;
+        
+        func_points[2*i] = x;
+        deriv_points[2*i] = x;
+        
+        /* Avaliar f(x) */
+        sprintf(maple_cmd, "evalf(subs(x=%f, %s));", x, function_str);
+        result = EvalMapleStatement(kv, maple_cmd);
+        
+        if (result && !IsMapleNULL(kv, result)) {
+            char *str_val = MapleToString(kv, result);
+            if (str_val && strlen(str_val) > 0) {
+                double y = atof(str_val);
+                /* Limitar valores extremos */
+                if (y > 10.0) y = 10.0;
+                else if (y < -10.0) y = -10.0;
+                else if (isnan(y) || isinf(y)) y = 0.0;
+                func_points[2*i + 1] = y;
+            } else {
+                func_points[2*i + 1] = 0.0;
+            }
+        } else {
+            func_points[2*i + 1] = 0.0;
+        }
+        
+        /* Avaliar df/dx */
+        sprintf(maple_cmd, "evalf(subs(x=%f, df));", x);
+        result = EvalMapleStatement(kv, maple_cmd);
+        
+        if (result && !IsMapleNULL(kv, result)) {
+            char *str_val = MapleToString(kv, result);
+            if (str_val && strlen(str_val) > 0) {
+                double dy = atof(str_val);
+                if (dy > 10.0) dy = 10.0;
+                else if (dy < -10.0) dy = -10.0;
+                else if (isnan(dy) || isinf(dy)) dy = 0.0;
+                deriv_points[2*i + 1] = dy;
+            } else {
+                deriv_points[2*i + 1] = 0.0;
+            }
+        } else {
+            deriv_points[2*i + 1] = 0.0;
+        }
+    }
+    
+    printf("✓ %d pontos calculados\n", num_points);
+}
+
+/* ============================================
+ * FUNÇÕES OPENGL - DESENHO
+ * ============================================ */
+
+void CDECL changeSize(int w, int h) 
+{
+    if (h < 0) h = 1;
     width = w;
     height = h;
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
+    glViewport(0, 0, w, h);
+}
+
+void drawAxes(void)
+{
+    int i;
     
-    /* Set the viewport to be the entire window */
-    glViewport(0,0,w,h);
-}
-
-/* OpenGL: draw a floating point number (for tic mark labels) */
-void drawNumber( double num )
-{
-    char buf[30];
-    int i;
-
-    sprintf(buf,"%.1f",num);
-    for( i=0; i<strlen(buf); ++i ) {
-	glutBitmapCharacter(FONT,buf[i]);
-    }
-}
-
-/* OpenGL: draws the axes tic marks and labels them */
-void drawTic( double tic, int X, int big )
-{
-    /* label tic mark */
-    if( big && tic != 0.0 ) {
-	if( X ) 
-	    glRasterPos2d(tic<-0.6 ? tic : tic-.06, -0.1);
-	else
-	    glRasterPos2d(tic<0 ? -0.23 : -0.2, tic<-0.6 ? tic+.03 : tic-.05);
-        drawNumber(tic);
-    }
- 
-    /* draw the tic */
-    glPushMatrix();
-    glBegin(GL_LINE_STRIP);
-	if( X ) {
-	    glVertex2d(tic,big ? -0.04 : -0.02);
-	    glVertex2d(tic,big ? 0.04 : 0.02);
-	}
-	else {
-	    glVertex2d(big ? -0.04 : -0.02,tic);
-	    glVertex2d(big ? 0.04 : 0.02,tic);
-	}
+    glColor3f(0.3f, 0.3f, 0.3f);
+    
+    /* Eixo X */
+    glBegin(GL_LINES);
+    glVertex2d(-6.0, 0.0);
+    glVertex2d(6.0, 0.0);
     glEnd();
-    glPopMatrix();
-}
-
-/* OpenGL draws the x/y axes */
-void drawAxes()
-{
-    double tic;
-    int big;
-
-    /* x axis */
-    glPushMatrix();
-    glBegin(GL_LINE_STRIP);
-    glVertex2d(1.0,0.0);
-    glVertex2d(-1.0,0.0);
+    
+    /* Eixo Y */
+    glBegin(GL_LINES);
+    glVertex2d(0.0, -6.0);
+    glVertex2d(0.0, 6.0);
     glEnd();
-    glPopMatrix();
-
-    /* y axis */
-    glPushMatrix();
-    glBegin(GL_LINE_STRIP);
-    glVertex2d(0.0,1.0);
-    glVertex2d(0.0,-1.0);
-    glEnd();
-    glPopMatrix();
-
-    /* tic marks */
-    for( big=1,tic=-1.0; tic<1.1; tic+=.25 ) {
-	drawTic(tic,1,big); /* x tic marks */
-	drawTic(tic,0,big); /* y tic marks */
-	big ^= 1;
+    
+    /* Marcas no eixo X */
+    glColor3f(0.2f, 0.2f, 0.2f);
+    for (i = -5; i <= 5; i++) {
+        if (i == 0) continue;
+        glBegin(GL_LINES);
+        glVertex2d(i, -0.1);
+        glVertex2d(i, 0.1);
+        glEnd();
     }
-
+    
+    /* Marcas no eixo Y */
+    for (i = -5; i <= 5; i++) {
+        if (i == 0) continue;
+        glBegin(GL_LINES);
+        glVertex2d(-0.1, i);
+        glVertex2d(0.1, i);
+        glEnd();
+    }
 }
 
-/* OpenGL: writes the point cursor position on the top left corner */
-void drawCoords(void)
-{
-    char buf[50];
-    int i;
-
-    glPushMatrix();
-    sprintf(buf,"[%.3f,%.3f]",xPos,yPos);
-    glRasterPos2d(-.99,.85);
-    for( i=0; i<strlen(buf); ++i ) {
-	glutBitmapCharacter(FONT,buf[i]);
-    }
-    glPopMatrix();
-}
-
-/* OpenGL: writes the title on the top left corner */
-void drawTitle(void)
+void drawFunction(double *points, int n, float r, float g, float b, float width_line)
 {
     int i;
-
-    glPushMatrix();
-    glColor3f(0.0,1.0,1.0);
-    glRasterPos2d(-.99,.93);
-    for( i=0; i<strlen(FitFunctionName); ++i ) {
-	glutBitmapCharacter(FONT,FitFunctionName[i]);
-    }
-    glPopMatrix();
-}
-
-/* OpenGL: draws a curve from the points given */
-void drawLine( double *vertex, int num_vertices, int color )
-{
-    int i;
-
-    if( num_vertices == 0 ) 
-	return;
-
-    if( color == 1 ) 
-	glColor3f(1.0,0.0,0.0);
-    else
-	glColor3f(0.0,1.0,0.0);
-
+    
+    if (!points || n == 0) return;
+    
+    glColor3f(r, g, b);
+    glLineWidth(width_line);
+    
     glBegin(GL_LINE_STRIP);
-    for( i=0; i<num_vertices; ++i ) {
-	glVertex2d(vertex[2*i+0],vertex[2*i+1]);
+    for (i = 0; i < n; i++) {
+        double x = points[2*i];
+        double y = points[2*i + 1];
+        
+        /* Pular valores inválidos */
+        if (isnan(y) || isinf(y)) continue;
+        
+        glVertex2d(x, y);
     }
     glEnd();
-
-    if( color == 1 ) {
-	glColor3f(0.0,0.0,1.0);
-	glPointSize(5.0);
-    }
-    else {
-	glColor3f(1.0,1.0,1.0);
-	glPointSize(3.0);
-    }
-    glBegin(GL_POINTS);
-    for( i=0; i<num_vertices; ++i ) {
-	glVertex2d(vertex[2*i+0],vertex[2*i+1]);
-    }
-    glEnd();
+    
+    glLineWidth(1.0f);
 }
 
-/* OpenMaple: Turns a C array into something Maple recognizes.
-   Note: Generally it is better to create the array in Maple
-         and get a pointer to the data block.  This way the
-         data can be changed in-place with no conversions 
-         needed.  In this case we are constantly resizeing
-         the array, so, we create new Maple Array headers
-         that point to the C allocated data.  The data is
-         not copied over to Maple each time this function is 
-         called.  Maple directly accesses the data allocated
-         by C in this program.
-*/
-ALGEB convertArrayToMaple( double *array, int size )
+void drawText(float x, float y, const char *text, float r, float g, float b)
 {
-    ALGEB vertexArray;
-    RTableSettings rts;
-    int bounds[4] = { 1, 100, 1, 2 };  /* 2x100 rtable */
-
-    /* setup the array details */
-    RTableGetDefaults(kv,&rts);
-    rts.data_type = RTABLE_FLOAT64;
-    rts.num_dimensions = 2;
-    rts.foreign = 1;
-    rts.order = RTABLE_C;
-    bounds[1] = size;
-
-    /* create the vertex Array */
-    vertexArray = RTableCreate(kv,&rts,vertex,bounds);
-
-    return( vertexArray );
-}
-
-/* OpenMaple: Calls Maple to find a function that closely 
-   approximates the chosen points using the selected method.  
-*/
-void curveFit(void)
-{
-    ALGEB r, vertexArray;
-    static int prev_num_vertices = 0;
-    static char* prev_fit_function = NULL;
-
-    /* don't regenerate the curve-fit if too few vertices, or
-       if no new points have been added
-    */
-    if( num_vertices < 2 || !FitFunction || (prev_num_vertices == num_vertices 
-        && prev_fit_function == FitFunctionName) )
-	return; 
-    prev_num_vertices = num_vertices;
-    prev_fit_function = FitFunctionName;
-    fit_size = 0;  /* don't draw any curve if there is an error */
-
-    /* convert the vertex array to a Maple Array */
-    vertexArray = convertArrayToMaple(vertex,num_vertices);
-
-    /* call the appropriate CurveFitting function */
-    r = EvalMapleProc(kv,FitFunction,2,vertexArray,varX);
-
-    /* r will be NULL if there was an error (eg. BSplineCurve was
-       used to fit too few points.  Don't draw anything in this case.
-    */
-    if( !r || IsMapleNULL(kv,r) )
-	return;
-
-    /* assign the result to the maple variable `eqn` (created at init time) */
-    MapleAssign(kv,varEqn,r);
-
-    /* useful to uncomment when debugging */
-    /* MapleALGEB_Printf(kv,"Result is: %a\n", r); */
-
-    /* Use Maple's plot command to generate a list of points worthy of
-       plotting.  The guts of the following line is 
-       op([1,1],plot(r,x=-2..2)); 
-    */
-    r = EvalMapleStatement(kv,
-	"Array(op([1,1],plot(eqn,x=-1..1)),datatype=float[8],order=C_order);");
-
-    /* Make sure the result of the above command is an rtable (Array) */
-    if( !r || !IsMapleRTable(kv,r) ) {
-	printf("error, not an rtable\n");
-	return;
+    size_t i;
+    glColor3f(r, g, b);
+    glRasterPos2f(x, y);
+    for (i = 0; i < strlen(text); i++) {
+        glutBitmapCharacter(FONT, text[i]);
     }
-
-    /* extract the data pointer from the array */
-    fit_size = RTableUpperBound(kv,r,1);
-    fit = (double*)RTableDataBlock(kv,r);
 }
 
-/* OpenGL: draw the scene */
+void drawInfo(void)
+{
+    char buf[256];
+    
+    /* Função atual */
+    if (current_function) {
+        sprintf(buf, "f(x) = %s", current_function);
+        drawText(-5.8f, 5.5f, buf, 1.0f, 1.0f, 0.0f);
+    }
+    
+    /* Integral */
+    if (show_integral) {
+        sprintf(buf, "Integral [%.1f, %.1f] = %.4f", x_min, x_max, integral_value);
+        drawText(-5.8f, 5.0f, buf, 0.0f, 1.0f, 1.0f);
+    }
+    
+    /* Legenda */
+    if (show_derivative) {
+        drawText(-5.8f, -5.2f, "Azul: f(x)  Verde: f'(x)", 0.8f, 0.8f, 0.8f);
+    }
+    
+    /* Instruções */
+    drawText(-5.8f, -5.7f, "i:integral d:derivada c:limpar q:sair", 0.5f, 0.5f, 0.5f);
+}
+
 void CDECL renderScene(void) 
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
+    
     drawAxes();
-    drawCoords();
-    drawLine(vertex,num_vertices,1);
-    curveFit();
-    drawLine(fit,fit_size,0);
-    drawTitle();
+    
+    /* Desenhar função principal */
+    if (func_points && num_points > 0) {
+        drawFunction(func_points, num_points, 0.0f, 0.5f, 1.0f, 2.0f);
+    }
+    
+    /* Desenhar derivada */
+    if (show_derivative && deriv_points && num_points > 0) {
+        drawFunction(deriv_points, num_points, 0.0f, 1.0f, 0.0f, 1.5f);
+    }
+    
+    /* Desenhar área da integral (simplificado) */
+    if (show_integral && func_points && num_points > 0) {
+        int i;
+        glColor4f(0.0f, 1.0f, 1.0f, 0.2f);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        
+        glBegin(GL_TRIANGLE_STRIP);
+        for (i = 0; i < num_points; i++) {
+            double x = func_points[2*i];
+            double y = func_points[2*i + 1];
+            if (x >= x_min && x <= x_max && !isnan(y) && !isinf(y)) {
+                glVertex2d(x, 0.0);
+                glVertex2d(x, y);
+            }
+        }
+        glEnd();
+        
+        glDisable(GL_BLEND);
+    }
+    
+    drawInfo();
+    
     glutSwapBuffers();
 }
 
-/* OpenGL: handle mouse clicks -- add a new point to the vertex array */
-void CDECL processMouse(int button, int state, int x, int y) 
-{
-    if( state == GLUT_DOWN ) {
-	int i = num_vertices;
-	if( vertex == NULL ) {
-	    /* alloc initial array of vertices */
-	    vertex_size = 50;
-	    vertex = (double*)malloc(2*vertex_size*sizeof(double));
-        }
-	else if( num_vertices == vertex_size ) {
-	    /* grow array of vertices */
-	    vertex_size *= 2;
-	    vertex = (double*)realloc(vertex,2*vertex_size*sizeof(double));
-        }
+/* ============================================
+ * CONTROLES
+ * ============================================ */
 
-	vertex[2*i+0] =  (double)(2*x-width)/width;
-	vertex[2*i+1] =  (double)(height-2*y)/height;
-	num_vertices++;
-    }
-}
-
-/* OpenGL: handle mouse motion -- display position of cursor */
-void CDECL setCursorPosition(int x, int y) 
-{
-    xPos =  (double)(2*x-width)/width;
-    yPos =  (double)(height-2*y)/height;
-}
-
-/* OpenGL: quit when 'q' is pressed, clear screen when 'c' is pressed */
 void CDECL processKeys(unsigned char key, int x, int y) 
 {
-    if( key == 'q' || key == 'Q' ) 
-	exit(0);
-    else if( key == 'c' || key == 'C' ) {
-        num_vertices = 0;
-        fit_size = 0;
+    (void)x; (void)y;
+    
+    if (key == 'q' || key == 'Q') {
+        exit(0);
+    }
+    else if (key == 'c' || key == 'C') {
+        if (func_points) free(func_points);
+        if (deriv_points) free(deriv_points);
+        func_points = NULL;
+        deriv_points = NULL;
+        num_points = 0;
+        current_function = NULL;
+        show_integral = 0;
+        show_derivative = 0;
+    }
+    else if (key == 'i' || key == 'I') {
+        show_integral = !show_integral;
+        printf("Integral: %s\n", show_integral ? "ON" : "OFF");
+    }
+    else if (key == 'd' || key == 'D') {
+        show_derivative = !show_derivative;
+        printf("Derivada: %s\n", show_derivative ? "ON" : "OFF");
     }
 }
 
-/* OpenMaple: right-click menu -- allow choice of CurveFitting function */
-void CDECL pickCurveFittingFunction( int option ) 
+void CDECL pickFunction(int option) 
 {
-    char fullname[100];
-
-    FitFunctionName = FitFunctions[option];
-
-    /* get the Maple function name for the selected member of
-       the CurveFitting package.
-    */
-    sprintf(fullname,"CurveFitting:-%s;",FitFunctionName);
-    FitFunction = EvalMapleStatement(kv,fullname);
-
-    if( !FitFunction ) {
-        /* perhaps the Maple library couldn't be found? */
-        char *dir;
-
-        /* set libname to $MAPLE/lib if $MAPLE exists in the environment */
-        if( (dir=getenv("MAPLE")) || (dir=getenv("MAPLE_ROOT")) ) {
-	    char *libpath;
-	    libpath = (char*)malloc((5+strlen(dir))*sizeof(char));
-	    sprintf(libpath,"%s/lib",dir);
-	    MapleLibName(kv,ToMapleString(kv,libpath));
-	    FitFunction = EvalMapleStatement(kv,fullname);
-	}
-    }
+    current_function = PresetFunctions[option];
+    calculate_function_points(current_function);
 }
 
-/* initialize OpenGL */
-void initOpenGL( int argc, char **argv )
+/* ============================================
+ * INICIALIZAÇÃO
+ * ============================================ */
+
+void initOpenGL(int argc, char **argv)
 {
     int i;
 
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA);
-    glutInitWindowPosition(100,100);
-    glutInitWindowSize(320,320);
-    glutCreateWindow("Line");
+    glutInitWindowPosition(100, 100);
+    glutInitWindowSize(640, 480);
+    glutCreateWindow("Plotador de Funções - OpenMaple");
+    
     glutDisplayFunc(renderScene);
     glutIdleFunc(renderScene);
     glutReshapeFunc(changeSize);
     glutKeyboardFunc(processKeys);
 
-    glutMouseFunc(processMouse);
-    glutPassiveMotionFunc(setCursorPosition);
-
-    glutCreateMenu(pickCurveFittingFunction);
-    for( i=0; FitFunctions[i] != NULL; ++i ) 
-	glutAddMenuEntry(FitFunctions[i],i);
+    glutCreateMenu(pickFunction);
+    for (i = 0; PresetFunctions[i] != NULL; ++i) 
+        glutAddMenuEntry(PresetFunctions[i], i);
     glutAttachMenu(GLUT_RIGHT_BUTTON);
-
+    
+    /* Fundo preto */
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    
+    /* Configurar projeção ortogonal */
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(-6.0, 6.0, -6.0, 6.0, -1.0, 1.0);
+    glMatrixMode(GL_MODELVIEW);
 }
 
-/* OpenMaple: text output callback function */
-static void M_DECL textCallBack( void *data, int tag, char *output )
-{
-    /* to see output on stdout, uncomment the following. */
-    /* printf("%s\n",output); */
-}
-
-/* OpenMaple: error output callback function */
-static void M_DECL errorCallBack ( void *data, M_INT offset, char *msg )
-{
-    /* show errors on stdout */
-    printf("%s\n",msg);
-}
-
-/* initialize Maple */
-void initMaple( int argc, char *argv[] )
+void initMaple(int argc, char *argv[])
 {
     MCallBackVectorDesc cb = { textCallBack, errorCallBack, 0, 0, 0, 0, 0, 0 };
     char err[2048];
-    ALGEB r;
+    char *maple_dir;
 
-    /* start Maple */
-    if( (kv=StartMaple(argc,argv,&cb,NULL,NULL,err)) == NULL ) {
-	printf("Initialization error: %s\n");
-	exit(1);
+    if ((kv = StartMaple(argc, argv, &cb, NULL, NULL, err)) == NULL) {
+        printf("Erro ao inicializar Maple: %s\n", err);
+        exit(1);
     }
+    
+    printf("✓ Maple inicializado\n");
 
-    /* get the function and variable names */
-    pickCurveFittingFunction(1);
-    varX = ToMapleName(kv,"x",1);
-    varEqn = ToMapleName(kv,"eqn",1);
-
+    /* Configurar libname (lazy, como line.c) */
+    if ((maple_dir = getenv("MAPLE")) || (maple_dir = getenv("MAPLE_ROOT"))) {
+        char *libpath = malloc((5 + strlen(maple_dir)) * sizeof(char));
+        sprintf(libpath, "%s/lib", maple_dir);
+        MapleLibName(kv, ToMapleString(kv, libpath));
+        free(libpath);
+        printf("✓ Libname configurado via $MAPLE\n");
+    }
+    
+    /* Testar com função inicial */
+    current_function = PresetFunctions[0];
+    calculate_function_points(current_function);
 }
 
-/* main entry point */
-int main( int argc, char **argv ) 
+/* ============================================
+ * MAIN
+ * ============================================ */
+
+int main(int argc, char **argv) 
 {
-    initOpenGL(0,argv);
-    initMaple(argc,argv);
+    printf("╔════════════════════════════════════════════════════════╗\n");
+    printf("║  Plotador Interativo de Funções                       ║\n");
+    printf("║  OpenMaple + OpenGL                                    ║\n");
+    printf("╚════════════════════════════════════════════════════════╝\n\n");
+    
+    initMaple(argc, argv);
+    initOpenGL(argc, argv);
+    
+    printf("\nControles:\n");
+    printf("  i - Mostrar/esconder integral\n");
+    printf("  d - Mostrar/esconder derivada\n");
+    printf("  c - Limpar\n");
+    printf("  q - Sair\n");
+    printf("  Botão direito - Menu de funções\n\n");
+    
     glutMainLoop();
 
     return 0;
 }
-
-
