@@ -5,7 +5,7 @@ MAPLE_BIN = $(MAPLE_DIR)/bin.X86_64_LINUX
 CC=gcc
 CFLAGS  = -Wall -Wextra -g -I$(MAPLE_DIR)/extern/include -Wall -Wextra
 LDLIBS  = -L$(MAPLE_BIN) -lmaplec -lrt -lm
-LDFLAGS = -Wl,-rpath,$(MAPLE_BIN) -Wl,-rpath,$$ORIGIN
+LDFLAGS = -Wl,-rpath,$(MAPLE_BIN) -Wl,-rpath,$(MAPLE_BIN)
 
 # Targets
 TARGETS = main
