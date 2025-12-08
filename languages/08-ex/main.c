@@ -1,14 +1,5 @@
-/* algebra.c
- *
- * Exemplos de uso da Maple C API com Maple 2021:
- *  - Produto de matrizes
- *  - Cálculo de determinantes
- *  - Solução de equação do segundo grau
- *  - Avaliação de polinômio em x=5
- *
- * Compilar: make
- * Executar: make run
- */
+/* main.c - Exemplo de Otimização Simbólica e Numérica com extração
+ * de valores em C */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,13 +9,14 @@
  * CALLBACKS (Comunicação com o Kernel Maple)
  * ============================================ */
 
+// Usamos (void) para evitar warnings de parâmetros não utilizados
 static void M_DECL textCallBack(void*       data,
                                 int         tag,
                                 const char* output)
 {
     (void)data;
     (void)tag;
-    printf("%s\n", output);
+    printf(">> Maple: %s\n", output);
 }
 
 static void M_DECL errorCallBack(void*       data,
@@ -33,187 +25,86 @@ static void M_DECL errorCallBack(void*       data,
 {
     (void)data;
     (void)offset;
-    fprintf(stderr, "❌ Erro: %s\n", msg);
+    fprintf(stderr, "❌ Erro Maple: %s\n", msg);
 }
 
 /* ============================================
- * EXEMPLOS
+ * FUNÇÃO DE EXEMPLO: Otimização (Extração de Valores em C)
  * ============================================ */
-
-static void example_matrices(MKernelVector kv)
+void example_optimization_extraction(MKernelVector kv)
 {
-    printf("\n=== PRODUTO DE MATRIZES ===\n");
 
-    /* Carregar o pacote LinearAlgebra */
-    printf("Carregando pacote LinearAlgebra...\n");
-    EvalMapleStatement(kv, "with(LinearAlgebra):");
-    printf("✓ Pacote carregado\n\n");
+    // Variáveis ALGEB para armazenar resultados Maple
+    ALGEB max_value_maple, x_value_maple, y_value_maple;
 
-    /* Definir matriz A (2x3) */
-    printf("Matriz A (2x3):\n");
-    EvalMapleStatement(kv, "A := Matrix([[1, 2, 3], [4, 5, 6]]);");
-    EvalMapleStatement(kv, "print(A);");
-    printf("\n");
+    // Variáveis C para armazenar resultados convertidos
+    double max_value_c, x_value_c, y_value_c;
 
-    /* Definir matriz B (3x2) */
-    printf("Matriz B (3x2):\n");
+    printf(
+        "\n=== EXEMPLO DE EXTRAÇÃO DE VALORES (ALGEB -> C) ===\n");
+
+    // Carregar o pacote de otimização
+    EvalMapleStatement(kv, "with(Optimization):");
+    printf("Pacote 'Optimization' carregado.\n");
+
+    // --- 1. Otimização Numérica com Restrições ---
+    printf("\n## 1. Maximização de x*y em x^2 + y^2 <= 1\n");
+
+    // Executar Maximize e ARMAZENAR o resultado na variável Maple
+    // 'max_result' O resultado é uma lista: [valor máximo,
+    // {coordenadas}]
     EvalMapleStatement(kv,
-                       "B := Matrix([[7, 8], [9, 10], [11, 12]]);");
-    EvalMapleStatement(kv, "print(B);");
-    printf("\n");
+                       "max_result := Maximize(x*y, {x^2 + y^2 <= "
+                       "1}, initialpoint = [x=0.5, y=0.5]);");
 
-    /* Produto A * B (resultado: 2x2) */
-    printf("Produto C = A . B (2x2):\n");
-    EvalMapleStatement(kv, "C := A . B;");
-    EvalMapleStatement(kv, "print(C);");
-    printf("\n");
-}
+    printf("Executado: max_result := Maximize(x*y, {x^2 + y^2 <= "
+           "1}, ...)\n");
 
-static void example_determinant(MKernelVector kv)
-{
-    printf("\n=== DETERMINANTE DE MATRIZES ===\n");
+    // --- 2. Extração do Valor Máximo (Componente Numérico) ---
+    printf("\n## 2. Extraindo Valor Máximo (max_result[1])\n");
 
-    /* Matriz 2x2 */
-    printf("Matriz d (2x2):\n");
-    EvalMapleStatement(kv, "d := Matrix([[3, 8], [4, 6]]);");
-    EvalMapleStatement(kv, "print(d);");
+    // 2.1. Avaliar max_result[1] para obter o resultado ALGEB do
+    // valor máximo (0.5)
+    max_value_maple = EvalMapleStatement(kv, "max_result[1];");
 
-    printf("\nDeterminante de d:\n");
-    EvalMapleStatement(kv, "det_d := Determinant(d);");
-    EvalMapleStatement(kv, "print(det_d);");
-    printf("(Esperado: 3*6 - 8*4 = 18 - 32 = -14)\n\n");
+    // 2.2. CONVERTER o resultado ALGEB (número racional/float) para
+    // double do C
+    max_value_c = MapleToFloat64(kv, max_value_maple);
 
-    /* Matriz 3x3 */
-    printf("Matriz E (3x3):\n");
-    EvalMapleStatement(
-        kv, "E := Matrix([[1, 2, 3], [0, 4, 5], [1, 0, 6]]);");
-    EvalMapleStatement(kv, "print(E);");
+    printf("Valor Máximo Encontrado (C double): **%.10f**\n",
+           max_value_c);
 
-    printf("\nDeterminante de E:\n");
-    EvalMapleStatement(kv, "det_E := Determinant(E);");
-    EvalMapleStatement(kv, "print(det_E);");
-    printf("\n");
+    // --- 3. Extração das Coordenadas (Componentes Numéricos) ---
+    printf("\n## 3. Extraindo Coordenadas X e Y\n");
 
-    /* Matriz 4x4 */
-    printf("Matriz F (4x4):\n");
-    EvalMapleStatement(kv,
-                       "F := Matrix([[2, 1, 0, 0], [1, 2, 1, 0], "
-                       "[0, 1, 2, 1], [0, 0, 1, 2]]);");
-    EvalMapleStatement(kv, "print(F);");
+    // As coordenadas estão no formato {x=valor, y=valor}.
 
-    printf("\nDeterminante de F:\n");
-    EvalMapleStatement(kv, "det_F := Determinant(F);");
-    EvalMapleStatement(kv, "print(det_F);");
-    printf("\n");
-}
+    // 3.1. Extrair o valor de X (rhs da primeira atribuição)
+    // op(1, max_result[2]) -> 'x = valor'
+    // rhs(...) -> 'valor'
+    x_value_maple =
+        EvalMapleStatement(kv, "rhs(op(1, max_result[2]));");
+    x_value_c = MapleToFloat64(kv, x_value_maple);
 
-static void example_quadratic(MKernelVector kv)
-{
-    printf("\n=== SOLUÇÃO DE EQUAÇÃO DO SEGUNDO GRAU ===\n");
+    // 3.2. Extrair o valor de Y (rhs da segunda atribuição)
+    y_value_maple =
+        EvalMapleStatement(kv, "rhs(op(2, max_result[2]));");
+    y_value_c = MapleToFloat64(kv, y_value_maple);
 
-    /* Equação 1: x^2 - 5x + 6 = 0 (raízes: 2 e 3) */
-    printf("Equação 1: x² - 5x + 6 = 0\n");
-    EvalMapleStatement(kv, "eq1 := x^2 - 5*x + 6 = 0;");
-    EvalMapleStatement(kv, "print(eq1);");
+    printf("Coordenada X (C double): **%.10f**\n", x_value_c);
+    printf("Coordenada Y (C double): **%.10f**\n", y_value_c);
 
-    printf("\nSoluções:\n");
-    EvalMapleStatement(kv, "sol1 := solve(eq1, x);");
-    EvalMapleStatement(kv, "print(sol1);");
-    printf("(Esperado: x = 2 ou x = 3)\n\n");
-
-    /* Equação 2: 2x^2 + 3x - 2 = 0 */
-    printf("Equação 2: 2x² + 3x - 2 = 0\n");
-    EvalMapleStatement(kv, "eq2 := 2*x^2 + 3*x - 2 = 0;");
-    EvalMapleStatement(kv, "print(eq2);");
-
-    printf("\nSoluções (exatas):\n");
-    EvalMapleStatement(kv, "sol2 := solve(eq2, x);");
-    EvalMapleStatement(kv, "print(sol2);");
-
-    printf("\nSoluções (numéricas):\n");
-    EvalMapleStatement(kv, "sol2_num := evalf(solve(eq2, x));");
-    EvalMapleStatement(kv, "print(sol2_num);");
-    printf("\n");
-
-    /* Equação 3: x^2 + 2x + 5 = 0 (raízes complexas) */
-    printf("Equação 3: x² + 2x + 5 = 0 (raízes complexas)\n");
-    EvalMapleStatement(kv, "eq3 := x^2 + 2*x + 5 = 0;");
-    EvalMapleStatement(kv, "print(eq3);");
-
-    printf("\nSoluções (complexas):\n");
-    EvalMapleStatement(kv, "sol3 := solve(eq3, x);");
-    EvalMapleStatement(kv, "print(sol3);");
-
-    printf("\nSoluções (numéricas):\n");
-    EvalMapleStatement(kv, "sol3_num := evalf(solve(eq3, x));");
-    EvalMapleStatement(kv, "print(sol3_num);");
-    printf("\n");
-
-    /* Usando fsolve para solução numérica direta */
-    printf("Usando fsolve (força solução numérica):\n");
-    printf("fsolve(x² - 5x + 6 = 0): ");
-    EvalMapleStatement(kv, "print(fsolve(x^2 - 5*x + 6 = 0, x));");
-    printf("\n");
-}
-
-static void example_polynomial(MKernelVector kv)
-{
-    printf("\n=== AVALIAÇÃO DE POLINÔMIO ===\n");
-
-    /* Definir polinômio: p(x) = 2x^3 - 3x^2 + 5x - 7 */
-    printf("Polinômio: p(x) = 2x³ - 3x² + 5x - 7\n");
-    EvalMapleStatement(kv, "p := x -> 2*x^3 - 3*x^2 + 5*x - 7;");
-    EvalMapleStatement(kv, "print(p(x));");
-    printf("\n");
-
-    /* Avaliar em x = 5 */
-    printf("Avaliação em x = 5:\n");
-    printf("p(5) = ");
-    EvalMapleStatement(kv, "p5 := p(5);");
-    EvalMapleStatement(kv, "print(p5);");
-    printf("\nCálculo: 2(125) - 3(25) + 5(5) - 7\n");
-    printf("       = 250 - 75 + 25 - 7 = 193\n\n");
-
-    /* Avaliar em vários pontos */
-    printf("Avaliação em múltiplos pontos:\n");
-    printf("p(0) = ");
-    EvalMapleStatement(kv, "print(p(0));");
-
-    printf("p(1) = ");
-    EvalMapleStatement(kv, "print(p(1));");
-
-    printf("p(2) = ");
-    EvalMapleStatement(kv, "print(p(2));");
-
-    printf("p(-1) = ");
-    EvalMapleStatement(kv, "print(p(-1));");
-    printf("\n");
-
-    /* Derivada do polinômio */
-    printf("Derivada p'(x):\n");
-    EvalMapleStatement(kv, "dp := diff(p(x), x);");
-    EvalMapleStatement(kv, "print(dp);");
-
-    printf("\nDerivada avaliada em x = 5:\n");
-    printf("p'(5) = ");
-    EvalMapleStatement(kv, "dp5 := eval(dp, x=5);");
-    EvalMapleStatement(kv, "print(dp5);");
-    printf("\n");
-
-    /* Raízes do polinômio */
-    printf("Raízes de p(x) = 0:\n");
-    EvalMapleStatement(kv, "rraizes := fsolve(p(x) = 0, x);");
-    EvalMapleStatement(kv, "print(raizes);");
-    printf("\n");
-
-    /* Polinômio com coeficientes simbólicos */
-    printf("Polinômio simbólico: q(x) = ax² + bx + c\n");
-    EvalMapleStatement(kv, "q := (x, a, b, c) -> a*x^2 + b*x + c;");
-
-    printf("\nq(5, 2, -3, 1) = ");
-    EvalMapleStatement(kv, "q5 := q(5, 2, -3, 1);");
-    EvalMapleStatement(kv, "print(q5);");
-    printf("Cálculo: 2(25) + (-3)(5) + 1 = 50 - 15 + 1 = 36\n\n");
+    // Exemplo de como usar os valores em C (lógica)
+    if(x_value_c > 0.707 && y_value_c > 0.707)
+    {
+        printf("\n=> Lógica C: Coordenadas estão no primeiro "
+               "quadrante. Confirmação do cálculo.\n");
+    }
+    else
+    {
+        printf("\n=> Lógica C: Algo estranho aconteceu com as "
+               "coordenadas.\n");
+    }
 }
 
 /* ============================================
@@ -236,9 +127,11 @@ int main(int argc, char* argv[])
         0  /* callBackCallBack */
     };
 
-    printf("=== Exemplos de Álgebra e Polinômios ===\n");
+    printf(
+        "=== Exemplos de Otimização (Extração de Valores C) ===\n");
     printf("🍁 Inicializando Maple...\n");
 
+    // Inicialização do kernel Maple
     kv = StartMaple(argc, argv, &cb, NULL, NULL, err);
     if(kv == NULL)
     {
@@ -248,19 +141,16 @@ int main(int argc, char* argv[])
 
     printf("✅ Maple inicializado com sucesso!\n");
 
-    /* CRÍTICO: Configurar libname */
+    /* Configurar libname, caso necessário para o Maple 2021 */
     printf("\nConfigurando bibliotecas Maple...\n");
     EvalMapleStatement(
         kv, "libname := \"/opt/maple2021/lib\", libname;");
     printf("✓ Bibliotecas configuradas\n");
 
-    /* Executar exemplos */
-    example_matrices(kv);
-    example_determinant(kv);
-    example_quadratic(kv);
-    example_polynomial(kv);
+    /* Executar o novo exemplo focado na extração */
+    example_optimization_extraction(kv);
 
-    printf("\n✅ Todos os exemplos executados com sucesso!\n");
+    printf("\n✅ Exemplo de Extração executado com sucesso!\n");
 
     StopMaple(kv);
     return 0;
