@@ -14,13 +14,9 @@ OPENGL_LIBS = -lglut -lGLU -lGL
 LDFLAGS = -Wl,-rpath,$(MAPLE_BIN) -Wl,-rpath,$$ORIGIN
 
 # Targets
-TARGETS = main line
+TARGETS = line
 
 all: $(TARGETS)
-
-# Compilar main.c (sem OpenGL)
-main: main.c
-	$(CC) $(CFLAGS) $< $(LDFLAGS) $(MAPLE_LIBS) -o $@
 
 # Compilar line.c (com OpenGL)
 line: line.c
@@ -31,12 +27,7 @@ license:
 	ln -s /opt/maple2021/license ..
 
 # Executar exemplos
-run: main
-	@echo "=== Executando exemplo main ==="
-	@$(call setup_libs)
-	@LD_LIBRARY_PATH=$(MAPLE_BIN):.:$$LD_LIBRARY_PATH ./main
-
-run-line: line
+run: line
 	@echo "=== Executando line (OpenMaple + OpenGL) ==="
 	@echo "Instruções:"
 	@echo "  - Clique botão esquerdo: adicionar pontos"
@@ -98,10 +89,8 @@ dry: clean
 help:
 	@echo "Targets disponíveis:"
 	@echo "  make all           - Compila todos (main + line)"
-	@echo "  make main          - Compila apenas main"
 	@echo "  make line          - Compila line.c (requer OpenGL)"
 	@echo "  make run           - Executa main"
-	@echo "  make run-line      - Executa line (interface gráfica)"
 	@echo "  make check-opengl  - Verifica se OpenGL está instalado"
 	@echo "  make check-libs    - Verifica dependências"
 	@echo "  make setup-libs    - Cria symlinks das bibliotecas"
@@ -109,7 +98,7 @@ help:
 	@echo "  make clean         - Remove executáveis"
 	@echo "  make dry           - Remove tudo (executáveis + symlinks)"
 
-.PHONY: all run run-line check-opengl check-libs setup-libs license clean dry help
+.PHONY: all run check-opengl check-libs setup-libs license clean dry help
 
 # Função auxiliar para setup
 define setup_libs
