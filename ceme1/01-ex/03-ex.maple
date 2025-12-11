@@ -1,0 +1,40 @@
+restart:
+interface(imaginaryunit = J):
+
+# Dados
+T1 := 100/1000:
+T2 := 1000/500:
+T3 := 1000/200:
+
+Va := 95:
+Za := 0.2*J:
+Zb := 10*J:
+Zc := 20 + 10*J:
+Zd := 15*J:
+Ze := 5 + 3*J:
+
+# Cálculos
+Va_ := Va/(T1*T2):
+Za_ := Za*(1/(T1*T2))^2:
+Zb_ := Zb/T2^2:
+Zc_ := Zc:
+Zd_ := Zd/T2^2:
+Ze_ := Ze*(T3/T2)^2:
+
+# Lista de nomes das variáveis (não avaliados!)
+ListaNomes := [ 'Za_', 'Zb_', 'Zc_', 'Zd_', 'Ze_' ]:
+
+# Lista dos valores
+ListaVals := [ Za_, Zb_, Zc_, Zd_, Ze_ ]:
+
+# Loop final: imprime nome = valor com 3 casas decimais
+for i to nops(ListaNomes) do
+    Nome := ListaNomes[i];
+    Val := evalf(ListaVals[i], 6);
+
+    print("%s = %.3f + %.3f*J\n",
+        Nome,
+        Re(Val),
+        Im(Val)
+    );
+end do:
